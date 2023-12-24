@@ -1,40 +1,35 @@
 const jwt = require('jsonwebtoken');
-const Controller = require('./controller');
-const db = require('../../database');
 const Global = require('../../global');
+const Controller = require('../controllers/controller');
 
 class Auth {
   /**
    * 
    * @param {import("express").Request} req 
    * @param {import("express").Response} res 
+   * @param {import("express").NextFunction} next
    */
-  static async login(req, res) {
+  static async protect(req, res, next) {
     try {
-      const {username, password} = req.body;
+      const { authorization } = req.headers;
 
-      if (!username || !password) {
-        throw Error('Username dan password wajib diisi');
-      }
+      const token = authorization
+        .replace('Bearer ', '')
+        .replace('bearer ', '');
 
-      const users = await db('users')
-        .where('username', '=', username)
-        .select();
+      await (new Promise((resolve, reject) => {
+        jwt.verify(token, Global.PRIVATE_KEY, (err, decoded) => {
+          if (err?.message) reject(err);
 
-      if (!users.length) throw Error('Username tidak ditemukan');
+          resolve(decoded);
+        });
+      }));
 
-      let user = users[0];
-
-      if (password !== user.password) throw Error('Password tidak sesuai');
-
-      const token = jwt.sign({id: user.id}, Global.PRIVATE_KEY);
-      user.token = token;
-  
-      return res.status(200).json(Controller.baseResponse(true, 'Success', user));
+      return next();
     } catch (error) {
-      return res.status(500).json(Controller.baseResponse(false, error.message));
+      return res.status(401).json(Controller.baseResponse(false, 'Need Auth', null));
     }
   }
-}
+};
 
 module.exports = Auth;
